@@ -18,6 +18,63 @@ pub trait Function {
 
         self.call(inputs)
     }
+
+    fn call_and_build_graph_unary(input: &mut Tensor) -> Tensor
+    where
+        Self: Sized + Default + 'static,
+    {
+        let mut function = Self::default();
+
+        let mut result = function.call_checked(vec![input]);
+
+        if !input.requires_grad {
+            return result;
+        }
+
+        result.requires_grad = true;
+
+        let mut node = Node::new(Some(Box::new(function)));
+        node.change_children(vec![(Some(Rc::clone(&input.node.as_ref().unwrap())))]);
+        result.node = Some(Rc::new(RefCell::new(node)));
+
+        result
+    }
+
+    fn call_and_build_graph_binary(input1: &mut Tensor, input2: &mut Tensor) -> Tensor
+    where
+        Self: Sized + Default + 'static,
+    {
+        let mut function = Self::default();
+
+        let mut result = function.call_checked(vec![input1, input2]);
+
+        if !input1.requires_grad && !input2.requires_grad {
+            return result;
+        }
+
+        result.requires_grad = true;
+
+        let mut node = Node::new(Some(Box::new(function)));
+
+        let mut new_children = Vec::new();
+
+        new_children.push(if input1.requires_grad {
+            Some(Rc::clone(&input1.node.as_ref().unwrap()))
+        } else {
+            None
+        });
+        new_children.push(if input2.requires_grad {
+            Some(Rc::clone(&input2.node.as_ref().unwrap()))
+        } else {
+            None
+        });
+
+        node.change_children(new_children);
+
+        result.node = Some(Rc::new(RefCell::new(node)));
+
+        result
+    }
 }
 
 impl Debug for dyn Function {
@@ -162,78 +219,24 @@ impl Function for MatMul {
     }
 }
 
-fn call_and_build_graph_unary<F: Function + Default + 'static>(input: &mut Tensor) -> Tensor {
-    let mut function = F::default();
-
-    let mut result = function.call_checked(vec![input]);
-
-    if !input.requires_grad {
-        return result;
-    }
-
-    result.requires_grad = true;
-
-    let mut node = Node::new(Some(Box::new(function)));
-    node.change_children(vec![(Some(Rc::clone(&input.node.as_ref().unwrap())))]);
-    result.node = Some(Rc::new(RefCell::new(node)));
-
-    result
-}
-
-fn call_and_build_graph_binary<F: Function + Default + 'static>(
-    input1: &mut Tensor,
-    input2: &mut Tensor,
-) -> Tensor {
-    let mut function = F::default();
-
-    let mut result = function.call_checked(vec![input1, input2]);
-
-    if !input1.requires_grad && !input2.requires_grad {
-        return result;
-    }
-
-    result.requires_grad = true;
-
-    let mut node = Node::new(Some(Box::new(function)));
-
-    let mut new_children = Vec::new();
-
-    new_children.push(if input1.requires_grad {
-        Some(Rc::clone(&input1.node.as_ref().unwrap()))
-    } else {
-        None
-    });
-    new_children.push(if input2.requires_grad {
-        Some(Rc::clone(&input2.node.as_ref().unwrap()))
-    } else {
-        None
-    });
-
-    node.change_children(new_children);
-
-    result.node = Some(Rc::new(RefCell::new(node)));
-
-    result
-}
-
 impl Tensor {
     pub fn square(&mut self) -> Tensor {
-        call_and_build_graph_unary::<Square>(self)
+        Square::call_and_build_graph_unary(self)
     }
 
     pub fn add(&mut self, rhs: &mut Tensor) -> Tensor {
-        call_and_build_graph_binary::<Add>(self, rhs)
+        Add::call_and_build_graph_binary(self, rhs)
     }
 
     pub fn mul(&mut self, rhs: &mut Tensor) -> Tensor {
-        call_and_build_graph_binary::<Mul>(self, rhs)
+        Mul::call_and_build_graph_binary(self, rhs)
     }
 
     pub fn sum(&mut self) -> Tensor {
-        call_and_build_graph_unary::<Sum>(self)
+        Sum::call_and_build_graph_unary(self)
     }
 
     pub fn matmul(&mut self, rhs: &mut Tensor) -> Tensor {
-        call_and_build_graph_binary::<MatMul>(self, rhs)
+        MatMul::call_and_build_graph_binary(self, rhs)
     }
 }
