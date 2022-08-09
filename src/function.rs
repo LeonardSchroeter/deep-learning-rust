@@ -131,12 +131,12 @@ impl Function for Sum {
 }
 
 #[derive(Default)]
-pub struct Dot {
+pub struct MatMul {
     input1: Option<ArcArrayD<f64>>,
     input2: Option<ArcArrayD<f64>>,
 }
 
-impl Function for Dot {
+impl Function for MatMul {
     fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
         let input1 = &input[0];
         let input2 = &input[1];
@@ -152,9 +152,8 @@ impl Function for Dot {
             outer_gradient.dot(&Tensor::new(
                 self.input2.as_ref().unwrap().to_owned().reversed_axes(),
             )),
-            outer_gradient.dot(&Tensor::new(
-                self.input1.as_ref().unwrap().to_owned().reversed_axes(),
-            )),
+            Tensor::new(self.input1.as_ref().unwrap().to_owned().reversed_axes())
+                .dot(&outer_gradient),
         ]
     }
 
@@ -235,6 +234,6 @@ impl Tensor {
     }
 
     pub fn matmul(&mut self, rhs: &mut Tensor) -> Tensor {
-        call_and_build_graph_binary::<Dot>(self, rhs)
+        call_and_build_graph_binary::<MatMul>(self, rhs)
     }
 }

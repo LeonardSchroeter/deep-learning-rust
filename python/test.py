@@ -13,6 +13,7 @@ a = t.arange(1.0, 5.0).reshape(2, 2)
 b = t.arange(1.0, 5.0).reshape(2, 2)
 
 a.requires_grad = True
+b.requires_grad = True
 
 c = a.matmul(b) * a
 
@@ -23,3 +24,4 @@ print("C", c)
 c.sum().backward()
 
 print(a.grad)
+print(b.grad)
