@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ndarray::{ArrayD, Ix1, Ix2, IxDyn};
+use ndarray::{ArrayD, Dimension, Ix1, Ix2, IxDyn};
 
 use crate::{ndarray_util::ArcArrayD, node::Node};
 
@@ -12,8 +12,8 @@ pub struct Tensor {
 }
 
 impl Tensor {
-    pub fn new(array: ArrayD<f64>) -> Tensor {
-        Tensor {
+    pub fn new(array: ArrayD<f64>) -> Self {
+        Self {
             array: array.into_shared(),
             node: None,
             requires_grad: false,
@@ -36,21 +36,21 @@ impl Tensor {
             Some(rc_node) => {
                 rc_node
                     .borrow_mut()
-                    .backward(&Tensor::new(ArrayD::ones(IxDyn(&[]))));
+                    .backward(&Self::new(ArrayD::ones(IxDyn(&[]))));
                 ()
             }
             None => panic!(),
         }
     }
 
-    pub fn gradient(&mut self) -> Option<Tensor> {
+    pub fn gradient(&mut self) -> Option<Self> {
         if self.node.is_none() {
             return None;
         }
 
         let rc_node = Rc::clone(self.node.as_ref().unwrap());
 
-        self.node = None;
+        self.node = Some(Rc::new(RefCell::new(Node::new(None))));
 
         Rc::try_unwrap(rc_node)
             .ok()
@@ -59,13 +59,13 @@ impl Tensor {
             .gradient()
     }
 
-    pub fn dot(&self, rhs: &Tensor) -> Tensor {
+    pub fn dot(&self, rhs: &Self) -> Self {
         let ndim_lhs = self.array.ndim();
         let ndim_rhs = rhs.array.ndim();
 
         match (ndim_lhs, ndim_rhs) {
-            (0, _) | (_, 0) => Tensor::new(&self.array * &rhs.array),
-            (1, 1) => Tensor::new(ArrayD::<f64>::from_elem(
+            (0, _) | (_, 0) => Self::new(&self.array * &rhs.array),
+            (1, 1) => Self::new(ArrayD::<f64>::from_elem(
                 IxDyn(&[]),
                 self.array
                     .clone()
@@ -74,7 +74,7 @@ impl Tensor {
                     .unwrap()
                     .dot(&rhs.array.clone().into_dimensionality::<Ix1>().ok().unwrap()),
             )),
-            (1, 2) => Tensor::new(
+            (1, 2) => Self::new(
                 self.array
                     .clone()
                     .into_dimensionality::<Ix1>()
@@ -83,7 +83,7 @@ impl Tensor {
                     .dot(&rhs.array.clone().into_dimensionality::<Ix2>().ok().unwrap())
                     .into_dyn(),
             ),
-            (2, 1) => Tensor::new(
+            (2, 1) => Self::new(
                 self.array
                     .clone()
                     .into_dimensionality::<Ix2>()
@@ -92,7 +92,7 @@ impl Tensor {
                     .dot(&rhs.array.clone().into_dimensionality::<Ix1>().ok().unwrap())
                     .into_dyn(),
             ),
-            (2, 2) => Tensor::new(
+            (2, 2) => Self::new(
                 self.array
                     .clone()
                     .into_dimensionality::<Ix2>()
@@ -103,5 +103,41 @@ impl Tensor {
             ),
             (_, _) => todo!(),
         }
+    }
+
+    pub fn zeros(shape: &[usize]) -> Self {
+        Self::new(ArrayD::<f64>::zeros(IxDyn(shape)))
+    }
+
+    pub fn ones(shape: &[usize]) -> Self {
+        Self::new(ArrayD::<f64>::ones(IxDyn(shape)))
+    }
+
+    pub fn from_elem(shape: &[usize], elem: f64) -> Self {
+        Self::new(ArrayD::<f64>::from_elem(IxDyn(shape), elem))
+    }
+
+    pub fn from_shape_vec(shape: &[usize], v: Vec<f64>) -> Self {
+        Self::new(ArrayD::<f64>::from_shape_vec(IxDyn(shape), v).unwrap())
+    }
+
+    pub fn from_shape_simple_fn<F>(shape: &[usize], f: F) -> Self
+    where
+        F: FnMut() -> f64,
+    {
+        Self::new(ArrayD::<f64>::from_shape_simple_fn(IxDyn(shape), f))
+    }
+
+    pub fn from_shape_fn<F>(shape: &[usize], f: F) -> Self
+    where
+        F: FnMut(<IxDyn as Dimension>::Pattern) -> f64,
+    {
+        Self::new(ArrayD::<f64>::from_shape_fn(IxDyn(shape), f))
+    }
+}
+
+impl PartialEq for Tensor {
+    fn eq(&self, other: &Self) -> bool {
+        self.array == other.array
     }
 }

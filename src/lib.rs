@@ -1,33 +1,45 @@
 pub mod function;
+pub mod functions;
 mod ndarray_util;
 mod node;
 pub mod tensor;
 
 #[cfg(test)]
 mod tests {
-    use ndarray::{ArrayD, IxDyn};
-
     use crate::tensor::Tensor;
 
     #[test]
-    fn it_works() {
-        let mut tensor = Tensor::new(
-            ArrayD::<f64>::from_shape_vec(IxDyn(&[2, 2]), vec![1.0, 2.0, 3.0, 4.0]).unwrap(),
-        );
-        let mut tensor2 = Tensor::new(
-            ArrayD::<f64>::from_shape_vec(IxDyn(&[2, 2]), vec![1.0, 2.0, 3.0, 4.0]).unwrap(),
-        );
-        tensor.require_grad();
-        tensor2.require_grad();
+    fn neural_net() {
+        const INPUT_DIM: usize = 2;
+        const LAYER_DIM: usize = 2;
 
-        let mut result = tensor.matmul(&mut tensor2).mul(&mut tensor);
+        let mut x = Tensor::from_shape_vec(&[INPUT_DIM], vec![1.0, 2.0]);
+        let mut y = Tensor::from_shape_vec(&[LAYER_DIM], vec![1.0, 2.0]);
 
-        result.sum().backward();
+        let mut weights = Tensor::ones(&[INPUT_DIM, LAYER_DIM]);
+        weights.require_grad();
+        let mut bias = Tensor::ones(&[LAYER_DIM]);
+        bias.require_grad();
 
-        println!("A {:#?}", tensor.array);
-        println!("B {:#?}", tensor2.array);
-        println!("C {:#?}", result.array);
-        println!("Grad {:#?}", tensor.gradient().unwrap().array);
-        println!("Grad {:#?}", tensor2.gradient().unwrap().array);
+        for _ in 1..1000 {
+            let mut x1 = x.matmul(&mut weights);
+            let mut x2 = x1.add(&mut bias);
+            let mut x3 = x2.relu();
+
+            let loss = x3.mse(&mut y);
+
+            println!("x {:#?}", x.array);
+            println!("y {:#?}", y.array);
+            println!("x3 {:#?}", x3.array);
+            println!("Loss {:#?}", loss.array);
+
+            loss.backward();
+
+            let weights_gradient = weights.gradient().unwrap();
+            weights.array -= &(&weights_gradient.array * 0.001);
+
+            let bias_gradient = bias.gradient().unwrap();
+            bias.array -= &(&bias_gradient.array * 0.001);
+        }
     }
 }

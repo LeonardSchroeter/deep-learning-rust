@@ -1,8 +1,6 @@
 use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
-use ndarray::{ArrayD, IxDyn};
-
-use crate::{ndarray_util::ArcArrayD, node::Node, tensor::Tensor};
+use crate::{node::Node, tensor::Tensor};
 
 pub trait Function {
     fn arity(&self) -> u8;
@@ -83,160 +81,28 @@ impl Debug for dyn Function {
     }
 }
 
-#[derive(Default)]
-pub struct Square {
-    input: Option<ArcArrayD<f64>>,
+#[macro_export]
+macro_rules! impl_tensor_unary {
+    ($($t:ty as $func_name:ident),+) => {
+        impl Tensor {
+            $(
+                pub fn $func_name(&mut self) -> Tensor {
+                    <$t>::call_and_build_graph_unary(self)
+                }
+            )+
+        }
+    };
 }
 
-impl Function for Square {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        let unary_input = &input[0];
-
-        self.input = Some(unary_input.array.clone());
-
-        Tensor::new(&unary_input.array * &unary_input.array)
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![Tensor::new(
-            self.input.as_ref().unwrap() * 2.0 * &outer_gradient.array,
-        )]
-    }
-
-    fn arity(&self) -> u8 {
-        1
-    }
-}
-
-#[derive(Default)]
-pub struct Add {
-    shape1: Vec<usize>,
-    shape2: Vec<usize>,
-}
-
-impl Function for Add {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        let input1 = &input[0];
-        let input2 = &input[1];
-
-        self.shape1 = input1.array.shape().to_vec();
-        self.shape2 = input2.array.shape().to_vec();
-
-        Tensor::new(&input1.array + &input2.array)
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![
-            Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape1)) * &outer_gradient.array),
-            Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape2)) * &outer_gradient.array),
-        ]
-    }
-
-    fn arity(&self) -> u8 {
-        2
-    }
-}
-
-#[derive(Default)]
-pub struct Mul {
-    input1: Option<ArcArrayD<f64>>,
-    input2: Option<ArcArrayD<f64>>,
-}
-
-impl Function for Mul {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        let input1 = &input[0];
-        let input2 = &input[1];
-
-        self.input1 = Some(input1.array.clone());
-        self.input2 = Some(input2.array.clone());
-
-        Tensor::new(&input1.array * &input2.array)
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![
-            Tensor::new(self.input2.as_ref().unwrap().to_owned() * &outer_gradient.array),
-            Tensor::new(self.input1.as_ref().unwrap().to_owned() * &outer_gradient.array),
-        ]
-    }
-
-    fn arity(&self) -> u8 {
-        2
-    }
-}
-
-#[derive(Default)]
-pub struct Sum {
-    shape: Vec<usize>,
-}
-
-impl Function for Sum {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        self.shape = input[0].array.shape().to_vec();
-
-        Tensor::new(ArrayD::<f64>::from_elem(IxDyn(&[]), input[0].array.sum()))
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape))).dot(outer_gradient)]
-    }
-
-    fn arity(&self) -> u8 {
-        1
-    }
-}
-
-#[derive(Default)]
-pub struct MatMul {
-    input1: Option<ArcArrayD<f64>>,
-    input2: Option<ArcArrayD<f64>>,
-}
-
-impl Function for MatMul {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        let input1 = &input[0];
-        let input2 = &input[1];
-
-        self.input1 = Some(input1.array.clone());
-        self.input2 = Some(input2.array.clone());
-
-        input1.dot(input2)
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![
-            outer_gradient.dot(&Tensor::new(
-                self.input2.as_ref().unwrap().to_owned().reversed_axes(),
-            )),
-            Tensor::new(self.input1.as_ref().unwrap().to_owned().reversed_axes())
-                .dot(&outer_gradient),
-        ]
-    }
-
-    fn arity(&self) -> u8 {
-        2
-    }
-}
-
-impl Tensor {
-    pub fn square(&mut self) -> Tensor {
-        Square::call_and_build_graph_unary(self)
-    }
-
-    pub fn add(&mut self, rhs: &mut Tensor) -> Tensor {
-        Add::call_and_build_graph_binary(self, rhs)
-    }
-
-    pub fn mul(&mut self, rhs: &mut Tensor) -> Tensor {
-        Mul::call_and_build_graph_binary(self, rhs)
-    }
-
-    pub fn sum(&mut self) -> Tensor {
-        Sum::call_and_build_graph_unary(self)
-    }
-
-    pub fn matmul(&mut self, rhs: &mut Tensor) -> Tensor {
-        MatMul::call_and_build_graph_binary(self, rhs)
-    }
+#[macro_export]
+macro_rules! impl_tensor_binary {
+    ($($t:ty as $func_name:ident),+) => {
+        impl Tensor {
+            $(
+                pub fn $func_name(&mut self, rhs: &mut Tensor) -> Tensor {
+                    <$t>::call_and_build_graph_binary(self, rhs)
+                }
+            )+
+        }
+    };
 }
