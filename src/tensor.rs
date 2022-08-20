@@ -2,7 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use ndarray::{ArrayD, Dimension, Ix1, Ix2, IxDyn};
 
-use crate::{ndarray_util::ArcArrayD, node::Node};
+use crate::{
+    ndarray_util::{broadcast_backwards, ArcArrayD},
+    node::Node,
+};
 
 #[derive(Clone, Debug)]
 pub struct Tensor {
@@ -133,6 +136,10 @@ impl Tensor {
         F: FnMut(<IxDyn as Dimension>::Pattern) -> f64,
     {
         Self::new(ArrayD::<f64>::from_shape_fn(IxDyn(shape), f))
+    }
+
+    pub fn broadcast_backwards(&self, target_shape: Vec<usize>) -> Self {
+        Tensor::new(broadcast_backwards(&self.array, target_shape))
     }
 }
 

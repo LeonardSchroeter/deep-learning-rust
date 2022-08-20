@@ -1,7 +1,9 @@
 use ndarray::{ArrayD, Ix1, Ix2, IxDyn};
 
 use crate::{
-    function::Function, impl_tensor_binary, impl_tensor_unary, ndarray_util::ArcArrayD,
+    function::Function,
+    impl_tensor_binary, impl_tensor_unary,
+    ndarray_util::{broadcast_backwards, ArcArrayD},
     tensor::Tensor,
 };
 
@@ -19,13 +21,15 @@ impl Function for Add {
         self.shape1 = input1.array.shape().to_vec();
         self.shape2 = input2.array.shape().to_vec();
 
-        Tensor::new(&input1.array + &input2.array)
+        let result = &input1.array + &input2.array;
+
+        Tensor::new(result)
     }
 
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
         vec![
-            Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape1)) * &outer_gradient.array),
-            Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape2)) * &outer_gradient.array),
+            outer_gradient.broadcast_backwards(self.shape1.clone()),
+            outer_gradient.broadcast_backwards(self.shape2.clone()),
         ]
     }
 
@@ -53,8 +57,20 @@ impl Function for Mul {
 
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
         vec![
-            Tensor::new(self.input2.as_ref().unwrap().to_owned() * &outer_gradient.array),
-            Tensor::new(self.input1.as_ref().unwrap().to_owned() * &outer_gradient.array),
+            Tensor::new(
+                self.input2.as_ref().unwrap()
+                    * broadcast_backwards(
+                        &outer_gradient.array,
+                        self.input2.as_ref().unwrap().shape().to_vec(),
+                    ),
+            ),
+            Tensor::new(
+                self.input1.as_ref().unwrap()
+                    * broadcast_backwards(
+                        &outer_gradient.array,
+                        self.input1.as_ref().unwrap().shape().to_vec(),
+                    ),
+            ),
         ]
     }
 
