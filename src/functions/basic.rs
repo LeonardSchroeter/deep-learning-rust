@@ -57,50 +57,19 @@ impl Function for Mul {
 
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
         vec![
-            Tensor::new(
-                self.input2.as_ref().unwrap()
-                    * broadcast_backwards(
-                        &outer_gradient.array,
-                        self.input2.as_ref().unwrap().shape().to_vec(),
-                    ),
-            ),
-            Tensor::new(
-                self.input1.as_ref().unwrap()
-                    * broadcast_backwards(
-                        &outer_gradient.array,
-                        self.input1.as_ref().unwrap().shape().to_vec(),
-                    ),
-            ),
+            Tensor::new(broadcast_backwards(
+                &(self.input2.as_ref().unwrap() * &outer_gradient.array).to_shared(),
+                self.input1.as_ref().unwrap().shape().to_vec(),
+            )),
+            Tensor::new(broadcast_backwards(
+                &(self.input1.as_ref().unwrap() * &outer_gradient.array).to_shared(),
+                self.input2.as_ref().unwrap().shape().to_vec(),
+            )),
         ]
     }
 
     fn arity(&self) -> u8 {
         2
-    }
-}
-
-#[derive(Default)]
-pub struct Square {
-    input: Option<ArcArrayD<f64>>,
-}
-
-impl Function for Square {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
-        let unary_input = &input[0];
-
-        self.input = Some(unary_input.array.clone());
-
-        Tensor::new(&unary_input.array * &unary_input.array)
-    }
-
-    fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![Tensor::new(
-            self.input.as_ref().unwrap() * 2.0 * &outer_gradient.array,
-        )]
-    }
-
-    fn arity(&self) -> u8 {
-        1
     }
 }
 
@@ -117,7 +86,9 @@ impl Function for Sum {
     }
 
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
-        vec![Tensor::new(ArrayD::<f64>::ones(IxDyn(&self.shape))).dot(outer_gradient)]
+        vec![Tensor::new(
+            ArrayD::<f64>::ones(IxDyn(&self.shape)) * &outer_gradient.array,
+        )]
     }
 
     fn arity(&self) -> u8 {
@@ -331,5 +302,140 @@ impl Function for MatMul {
     }
 }
 
-impl_tensor_unary!(Square as square, Sum as sum);
+impl_tensor_unary!(Sum as sum);
 impl_tensor_binary!(Add as add, Mul as mul, MatMul as matmul);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn add_same_shape() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let c = Tensor::from_shape_vec(&[3], vec![5., 7., 9.]);
+
+        assert_eq!(a.add(&mut b), c);
+    }
+
+    #[test]
+    fn add_broadcast() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[1], vec![4.]);
+        let c = Tensor::from_shape_vec(&[3], vec![5., 6., 7.]);
+
+        assert_eq!(a.add(&mut b), c);
+    }
+
+    #[test]
+    fn add_broadcast_2() {
+        let mut a = Tensor::from_shape_vec(&[1], vec![1.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let c = Tensor::from_shape_vec(&[3], vec![5., 6., 7.]);
+
+        assert_eq!(a.add(&mut b), c);
+    }
+
+    #[test]
+    fn add_gradient_same_shape() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        a.require_grad();
+        b.require_grad();
+
+        let c = a.add(&mut b).sum();
+
+        c.backward();
+
+        assert_eq!(
+            a.gradient().unwrap(),
+            Tensor::from_shape_vec(&[3], vec![1., 1., 1.])
+        );
+
+        assert_eq!(
+            b.gradient().unwrap(),
+            Tensor::from_shape_vec(&[3], vec![1., 1., 1.])
+        );
+    }
+
+    #[test]
+    fn add_gradient_broadcast() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[], vec![4.]);
+        a.require_grad();
+        b.require_grad();
+
+        let c = a.add(&mut b).sum();
+
+        c.backward();
+
+        assert_eq!(
+            a.gradient().unwrap(),
+            Tensor::from_shape_vec(&[3], vec![1., 1., 1.])
+        );
+
+        assert_eq!(b.gradient().unwrap(), Tensor::from_shape_vec(&[], vec![3.]));
+    }
+
+    #[test]
+    fn mul_same_shape() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let c = Tensor::from_shape_vec(&[3], vec![4., 10., 18.]);
+
+        assert_eq!(a.mul(&mut b), c);
+    }
+
+    #[test]
+    fn mul_broadcast() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[1], vec![4.]);
+        let c = Tensor::from_shape_vec(&[3], vec![4., 8., 12.]);
+
+        assert_eq!(a.mul(&mut b), c);
+    }
+
+    #[test]
+    fn mul_broadcast_2() {
+        let mut a = Tensor::from_shape_vec(&[1], vec![1.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let c = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+
+        assert_eq!(a.mul(&mut b), c);
+    }
+
+    #[test]
+    fn mul_gradient_same_shape() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        a.require_grad();
+        b.require_grad();
+
+        let c = a.mul(&mut b).sum();
+
+        c.backward();
+
+        assert_eq!(a.gradient().unwrap(), b);
+
+        assert_eq!(b.gradient().unwrap(), a);
+    }
+
+    #[test]
+    fn mul_gradient_broadcast() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let mut b = Tensor::from_shape_vec(&[], vec![4.]);
+        a.require_grad();
+        b.require_grad();
+
+        let c = a.mul(&mut b).sum();
+
+        c.backward();
+
+        assert_eq!(
+            a.gradient().unwrap(),
+            Tensor::from_shape_vec(&[3], vec![4., 4., 4.])
+        );
+
+        assert_eq!(b.gradient().unwrap(), Tensor::from_shape_vec(&[], vec![6.]));
+    }
+}
