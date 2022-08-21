@@ -1,6 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
-use ndarray::{ArrayD, Dimension, Ix1, Ix2, IxDyn};
+use float_cmp::ApproxEq;
+use ndarray::{ArrayD, Dimension, Ix1, Ix2, IxDyn, Zip};
+use ndarray_rand::{rand_distr::Distribution, RandomExt};
 
 use crate::{
     ndarray_util::{broadcast_backwards, ArcArrayD},
@@ -138,6 +140,13 @@ impl Tensor {
         Self::new(ArrayD::<f64>::from_shape_fn(IxDyn(shape), f))
     }
 
+    pub fn random<IdS>(shape: &[usize], distribution: IdS) -> Self
+    where
+        IdS: Distribution<f64>,
+    {
+        Self::new(ArrayD::<f64>::random(IxDyn(shape), distribution))
+    }
+
     pub fn broadcast_backwards(&self, target_shape: Vec<usize>) -> Self {
         Tensor::new(broadcast_backwards(&self.array, target_shape))
     }
@@ -146,5 +155,24 @@ impl Tensor {
 impl PartialEq for Tensor {
     fn eq(&self, other: &Self) -> bool {
         self.array == other.array
+    }
+}
+
+impl<M: Copy + std::default::Default> ApproxEq for Tensor
+where
+    f64: ApproxEq<Margin = M>,
+{
+    type Margin = M;
+
+    fn approx_eq<T: Into<Self::Margin>>(self, other: Self, margin: T) -> bool {
+        let margin = margin.into();
+
+        Zip::from(&self.array)
+            .and(&other.array)
+            .all(|a, b| a.approx_eq(*b, margin))
+    }
+
+    fn approx_ne<T: Into<Self::Margin>>(self, other: Self, margin: T) -> bool {
+        !self.approx_eq(other, margin)
     }
 }

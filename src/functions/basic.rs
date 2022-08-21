@@ -438,4 +438,25 @@ mod tests {
 
         assert_eq!(b.gradient().unwrap(), Tensor::from_shape_vec(&[], vec![6.]));
     }
+
+    #[test]
+    fn sum() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let c = Tensor::from_shape_vec(&[], vec![6.]);
+
+        assert_eq!(a.sum(), c);
+    }
+
+    #[test]
+    fn sum_gradient() {
+        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        a.require_grad();
+
+        let c = a.sum();
+        c.backward();
+        assert_eq!(
+            a.gradient().unwrap(),
+            Tensor::from_shape_vec(&[3], vec![1., 1., 1.])
+        );
+    }
 }
