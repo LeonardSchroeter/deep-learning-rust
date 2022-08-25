@@ -1,7 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    ops::{Add, AddAssign, Mul, SubAssign},
+    rc::Rc,
+};
 
 use float_cmp::ApproxEq;
-use ndarray::{ArrayD, Dimension, Ix1, Ix2, IxDyn, Zip};
+use ndarray::{ArrayD, Dimension, IxDyn, Zip};
 use ndarray_rand::{rand_distr::Distribution, RandomExt};
 
 use crate::{
@@ -25,10 +29,11 @@ impl Tensor {
         }
     }
 
-    pub fn require_grad(&mut self) {
-        if !self.requires_grad {
-            self.requires_grad = true;
-            self.node = Some(Rc::new(RefCell::new(Node::new(None))));
+    pub fn require_grad(self) -> Self {
+        Self {
+            array: self.array,
+            requires_grad: true,
+            node: self.node.or(Some(Rc::new(RefCell::new(Node::new(None))))),
         }
     }
 
@@ -39,75 +44,18 @@ impl Tensor {
 
         match &self.node {
             Some(rc_node) => {
-                rc_node
-                    .borrow_mut()
-                    .backward(&Self::new(ArrayD::ones(IxDyn(&[]))));
-                ()
+                rc_node.borrow_mut().backward(&Self::ones(&[]));
             }
             None => panic!(),
         }
     }
 
-    pub fn gradient(&mut self) -> Option<Self> {
+    pub fn gradient(&self) -> Option<Self> {
         if self.node.is_none() {
             return None;
         }
 
-        let rc_node = Rc::clone(self.node.as_ref().unwrap());
-
-        self.node = Some(Rc::new(RefCell::new(Node::new(None))));
-
-        Rc::try_unwrap(rc_node)
-            .ok()
-            .unwrap()
-            .into_inner()
-            .gradient()
-    }
-
-    pub fn dot(&self, rhs: &Self) -> Self {
-        let ndim_lhs = self.array.ndim();
-        let ndim_rhs = rhs.array.ndim();
-
-        match (ndim_lhs, ndim_rhs) {
-            (0, _) | (_, 0) => Self::new(&self.array * &rhs.array),
-            (1, 1) => Self::new(ArrayD::<f64>::from_elem(
-                IxDyn(&[]),
-                self.array
-                    .clone()
-                    .into_dimensionality::<Ix1>()
-                    .ok()
-                    .unwrap()
-                    .dot(&rhs.array.clone().into_dimensionality::<Ix1>().ok().unwrap()),
-            )),
-            (1, 2) => Self::new(
-                self.array
-                    .clone()
-                    .into_dimensionality::<Ix1>()
-                    .ok()
-                    .unwrap()
-                    .dot(&rhs.array.clone().into_dimensionality::<Ix2>().ok().unwrap())
-                    .into_dyn(),
-            ),
-            (2, 1) => Self::new(
-                self.array
-                    .clone()
-                    .into_dimensionality::<Ix2>()
-                    .ok()
-                    .unwrap()
-                    .dot(&rhs.array.clone().into_dimensionality::<Ix1>().ok().unwrap())
-                    .into_dyn(),
-            ),
-            (2, 2) => Self::new(
-                self.array
-                    .clone()
-                    .into_dimensionality::<Ix2>()
-                    .ok()
-                    .unwrap()
-                    .dot(&rhs.array.clone().into_dimensionality::<Ix2>().ok().unwrap())
-                    .into_dyn(),
-            ),
-            (_, _) => todo!(),
-        }
+        self.node.as_ref().unwrap().borrow_mut().gradient()
     }
 
     pub fn zeros(shape: &[usize]) -> Self {
@@ -149,6 +97,58 @@ impl Tensor {
 
     pub fn broadcast_backwards(&self, target_shape: Vec<usize>) -> Self {
         Tensor::new(broadcast_backwards(&self.array, target_shape))
+    }
+
+    pub fn add_in_place(&mut self, rhs: &Tensor) {
+        self.array += &rhs.array;
+    }
+
+    pub fn sub_in_place(&mut self, rhs: &Tensor) {
+        self.array -= &rhs.array;
+    }
+}
+
+impl Add for &Tensor {
+    type Output = Tensor;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        self.plus(rhs)
+    }
+}
+
+impl Add<f64> for &Tensor {
+    type Output = Tensor;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        self.plus(&Tensor::from_elem(&[], rhs))
+    }
+}
+
+impl Mul for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        self.times(rhs)
+    }
+}
+
+impl Mul<f64> for &Tensor {
+    type Output = Tensor;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        self.times(&Tensor::from_elem(&[], rhs))
+    }
+}
+
+impl AddAssign for Tensor {
+    fn add_assign(&mut self, rhs: Self) {
+        self.add_in_place(&rhs)
+    }
+}
+
+impl SubAssign for Tensor {
+    fn sub_assign(&mut self, rhs: Self) {
+        self.sub_in_place(&rhs)
     }
 }
 

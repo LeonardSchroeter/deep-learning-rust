@@ -9,7 +9,7 @@ struct MSE {
 }
 
 impl Function for MSE {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         let y_hat = &input[0];
         let y = &input[1];
 
@@ -44,7 +44,7 @@ struct CrossEntropyWithSoftmax {
 }
 
 impl Function for CrossEntropyWithSoftmax {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         let y_hat = &input[0];
         let y = &input[1];
 
@@ -100,10 +100,10 @@ mod tests {
 
     #[test]
     fn mse_call_works() {
-        let mut zeros = Tensor::zeros(&[2, 2]);
-        let mut ones = Tensor::ones(&[2, 2]);
+        let zeros = Tensor::zeros(&[2, 2]);
+        let ones = Tensor::ones(&[2, 2]);
 
-        let mse = zeros.mse(&mut ones);
+        let mse = zeros.mse(&ones);
 
         let exptected = Tensor::from_elem(&[], 1.0);
 
@@ -112,12 +112,10 @@ mod tests {
 
     #[test]
     fn mse_gradient_works() {
-        let mut zeros = Tensor::zeros(&[2, 2]);
-        let mut ones = Tensor::ones(&[2, 2]);
-        zeros.require_grad();
-        ones.require_grad();
+        let zeros = Tensor::zeros(&[2, 2]).require_grad();
+        let ones = Tensor::ones(&[2, 2]).require_grad();
 
-        let mse = zeros.mse(&mut ones);
+        let mse = zeros.mse(&ones);
 
         mse.backward();
 
@@ -133,10 +131,10 @@ mod tests {
 
     #[test]
     fn cross_entropy_call_works() {
-        let mut input = Tensor::from_shape_vec(&[2, 2], vec![0.2, 0.8, 0.3, 0.7]);
-        let mut target = Tensor::from_shape_vec(&[2, 2], vec![1.0, 0.0, 1.0, 0.0]);
+        let input = Tensor::from_shape_vec(&[2, 2], vec![0.2, 0.8, 0.3, 0.7]);
+        let target = Tensor::from_shape_vec(&[2, 2], vec![1.0, 0.0, 1.0, 0.0]);
 
-        let cross_entropy = input.cross_entropy_with_softmax(&mut target);
+        let cross_entropy = input.cross_entropy_with_softmax(&target);
 
         let expected = Tensor::from_elem(&[], 0.9753);
 
@@ -145,12 +143,10 @@ mod tests {
 
     #[test]
     fn cross_entropy_gradient_works() {
-        let mut input = Tensor::from_shape_vec(&[2, 2], vec![0.2, 0.8, 0.3, 0.7]);
-        let mut target = Tensor::from_shape_vec(&[2, 2], vec![1.0, 0.0, 1.0, 0.0]);
-        input.require_grad();
-        target.require_grad();
+        let input = Tensor::from_shape_vec(&[2, 2], vec![0.2, 0.8, 0.3, 0.7]).require_grad();
+        let target = Tensor::from_shape_vec(&[2, 2], vec![1.0, 0.0, 1.0, 0.0]).require_grad();
 
-        let cross_entropy = input.cross_entropy_with_softmax(&mut target);
+        let cross_entropy = input.cross_entropy_with_softmax(&target);
 
         cross_entropy.backward();
 

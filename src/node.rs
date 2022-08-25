@@ -18,8 +18,8 @@ impl Node {
         }
     }
 
-    pub fn gradient(self) -> Option<Tensor> {
-        self.gradient
+    pub fn gradient(&mut self) -> Option<Tensor> {
+        self.gradient.take()
     }
 
     pub fn change_children(&mut self, new_children: Vec<Option<Rc<RefCell<Node>>>>) {
@@ -39,8 +39,8 @@ impl Node {
         let inner_gradient = self.function.as_ref().unwrap().gradient(outer_gradient);
 
         for (child, inner_gradient) in self.children.iter_mut().zip(inner_gradient) {
-            if let Some(child_rc) = child {
-                child_rc.borrow_mut().backward(&inner_gradient);
+            if let Some(child) = child {
+                child.borrow_mut().backward(&inner_gradient);
             }
         }
 

@@ -14,7 +14,7 @@ pub struct Add {
 }
 
 impl Function for Add {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         let input1 = &input[0];
         let input2 = &input[1];
 
@@ -39,13 +39,13 @@ impl Function for Add {
 }
 
 #[derive(Default)]
-pub struct Mul {
+pub struct Times {
     input1: Option<ArcArrayD<f64>>,
     input2: Option<ArcArrayD<f64>>,
 }
 
-impl Function for Mul {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+impl Function for Times {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         let input1 = &input[0];
         let input2 = &input[1];
 
@@ -58,11 +58,11 @@ impl Function for Mul {
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor> {
         vec![
             Tensor::new(broadcast_backwards(
-                &(self.input2.as_ref().unwrap() * &outer_gradient.array).to_shared(),
+                &(self.input2.as_ref().unwrap() * &outer_gradient.array),
                 self.input1.as_ref().unwrap().shape().to_vec(),
             )),
             Tensor::new(broadcast_backwards(
-                &(self.input1.as_ref().unwrap() * &outer_gradient.array).to_shared(),
+                &(self.input1.as_ref().unwrap() * &outer_gradient.array),
                 self.input2.as_ref().unwrap().shape().to_vec(),
             )),
         ]
@@ -79,7 +79,7 @@ pub struct Sum {
 }
 
 impl Function for Sum {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         self.shape = input[0].array.shape().to_vec();
 
         Tensor::new(ArrayD::<f64>::from_elem(IxDyn(&[]), input[0].array.sum()))
@@ -103,7 +103,7 @@ pub struct MatMul {
 }
 
 impl Function for MatMul {
-    fn call(&mut self, input: Vec<&mut Tensor>) -> Tensor {
+    fn call(&mut self, input: Vec<&Tensor>) -> Tensor {
         let input1 = &input[0];
         let input2 = &input[1];
 
@@ -303,7 +303,7 @@ impl Function for MatMul {
 }
 
 impl_tensor_unary!(Sum as sum);
-impl_tensor_binary!(Add as add, Mul as mul, MatMul as matmul);
+impl_tensor_binary!(Add as plus, Times as times, MatMul as matmul);
 
 #[cfg(test)]
 mod tests {
@@ -311,39 +311,37 @@ mod tests {
 
     #[test]
     fn add_same_shape() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
         let c = Tensor::from_shape_vec(&[3], vec![5., 7., 9.]);
 
-        assert_eq!(a.add(&mut b), c);
+        assert_eq!(a.plus(&b), c);
     }
 
     #[test]
     fn add_broadcast() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[1], vec![4.]);
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let b = Tensor::from_shape_vec(&[1], vec![4.]);
         let c = Tensor::from_shape_vec(&[3], vec![5., 6., 7.]);
 
-        assert_eq!(a.add(&mut b), c);
+        assert_eq!(a.plus(&b), c);
     }
 
     #[test]
     fn add_broadcast_2() {
-        let mut a = Tensor::from_shape_vec(&[1], vec![1.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let a = Tensor::from_shape_vec(&[1], vec![1.]);
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
         let c = Tensor::from_shape_vec(&[3], vec![5., 6., 7.]);
 
-        assert_eq!(a.add(&mut b), c);
+        assert_eq!(a.plus(&b), c);
     }
 
     #[test]
     fn add_gradient_same_shape() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
-        a.require_grad();
-        b.require_grad();
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]).require_grad();
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]).require_grad();
 
-        let c = a.add(&mut b).sum();
+        let c = a.plus(&b).sum();
 
         c.backward();
 
@@ -360,12 +358,10 @@ mod tests {
 
     #[test]
     fn add_gradient_broadcast() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[], vec![4.]);
-        a.require_grad();
-        b.require_grad();
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]).require_grad();
+        let b = Tensor::from_shape_vec(&[], vec![4.]).require_grad();
 
-        let c = a.add(&mut b).sum();
+        let c = a.plus(&b).sum();
 
         c.backward();
 
@@ -379,39 +375,37 @@ mod tests {
 
     #[test]
     fn mul_same_shape() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
         let c = Tensor::from_shape_vec(&[3], vec![4., 10., 18.]);
 
-        assert_eq!(a.mul(&mut b), c);
+        assert_eq!(a.times(&b), c);
     }
 
     #[test]
     fn mul_broadcast() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[1], vec![4.]);
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let b = Tensor::from_shape_vec(&[1], vec![4.]);
         let c = Tensor::from_shape_vec(&[3], vec![4., 8., 12.]);
 
-        assert_eq!(a.mul(&mut b), c);
+        assert_eq!(a.times(&b), c);
     }
 
     #[test]
     fn mul_broadcast_2() {
-        let mut a = Tensor::from_shape_vec(&[1], vec![1.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
+        let a = Tensor::from_shape_vec(&[1], vec![1.]);
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
         let c = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
 
-        assert_eq!(a.mul(&mut b), c);
+        assert_eq!(a.times(&b), c);
     }
 
     #[test]
     fn mul_gradient_same_shape() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]);
-        a.require_grad();
-        b.require_grad();
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]).require_grad();
+        let b = Tensor::from_shape_vec(&[3], vec![4., 5., 6.]).require_grad();
 
-        let c = a.mul(&mut b).sum();
+        let c = a.times(&b).sum();
 
         c.backward();
 
@@ -422,12 +416,10 @@ mod tests {
 
     #[test]
     fn mul_gradient_broadcast() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        let mut b = Tensor::from_shape_vec(&[], vec![4.]);
-        a.require_grad();
-        b.require_grad();
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]).require_grad();
+        let b = Tensor::from_shape_vec(&[], vec![4.]).require_grad();
 
-        let c = a.mul(&mut b).sum();
+        let c = a.times(&b).sum();
 
         c.backward();
 
@@ -441,7 +433,7 @@ mod tests {
 
     #[test]
     fn sum() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
         let c = Tensor::from_shape_vec(&[], vec![6.]);
 
         assert_eq!(a.sum(), c);
@@ -449,8 +441,7 @@ mod tests {
 
     #[test]
     fn sum_gradient() {
-        let mut a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]);
-        a.require_grad();
+        let a = Tensor::from_shape_vec(&[3], vec![1., 2., 3.]).require_grad();
 
         let c = a.sum();
         c.backward();

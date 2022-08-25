@@ -1,8 +1,11 @@
-use ndarray::{ArcArray, ArrayD, Axis, IxDyn};
+use ndarray::{ArcArray, ArrayBase, ArrayD, Axis, Data, IxDyn};
 
 pub type ArcArrayD<A> = ArcArray<A, IxDyn>;
 
-pub fn broadcast_backwards(input: &ArcArrayD<f64>, target_shape: Vec<usize>) -> ArrayD<f64> {
+pub fn broadcast_backwards<A: Data<Elem = f64>>(
+    input: &ArrayBase<A, IxDyn>,
+    target_shape: Vec<usize>,
+) -> ArrayD<f64> {
     let mut axes: Vec<usize> = Vec::new();
 
     let mut target_shape_iter = target_shape.iter();

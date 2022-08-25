@@ -1,6 +1,9 @@
-use deep_learning::tensor::Tensor;
+use deep_learning::{
+    layer::{Layer, Linear},
+    optimizer::{Optimizer, SGD},
+    tensor::Tensor,
+};
 use mnist::{Mnist, MnistBuilder};
-use ndarray_rand::rand_distr::StandardNormal;
 
 fn main() {
     let Mnist {
@@ -12,12 +15,12 @@ fn main() {
         .test_set_length(10_000)
         .finalize();
 
-    let mut x = Tensor::from_shape_vec(
+    let x = Tensor::from_shape_vec(
         &[500, 100, 784],
         trn_img.into_iter().map(|x| x as f64 / 256.).collect(),
     );
 
-    let mut y = Tensor::from_shape_vec(
+    let y = Tensor::from_shape_vec(
         &[500, 100, 10],
         trn_lbl.into_iter().map(|y| y as f64).collect(),
     );
@@ -29,60 +32,38 @@ fn main() {
     const HIDDEN_DIM_2: usize = 64;
     const OUTPUT_DIM: usize = 10;
 
-    let mut w1 = Tensor::random(&[INPUT_DIM, HIDDEN_DIM_1], StandardNormal);
-    w1.require_grad();
-    let mut w2 = Tensor::random(&[HIDDEN_DIM_1, HIDDEN_DIM_2], StandardNormal);
-    w2.require_grad();
-    let mut w3 = Tensor::random(&[HIDDEN_DIM_2, OUTPUT_DIM], StandardNormal);
-    w3.require_grad();
-    let mut b1 = Tensor::random(&[HIDDEN_DIM_1], StandardNormal);
-    b1.require_grad();
-    let mut b2 = Tensor::random(&[HIDDEN_DIM_2], StandardNormal);
-    b2.require_grad();
-    let mut b3 = Tensor::random(&[OUTPUT_DIM], StandardNormal);
-    b3.require_grad();
+    let mut layer1 = Linear::new(INPUT_DIM, HIDDEN_DIM_1, Some(Tensor::sigmoid));
+    let mut layer2 = Linear::new(HIDDEN_DIM_1, HIDDEN_DIM_2, Some(Tensor::sigmoid));
+    let mut layer3 = Linear::new(HIDDEN_DIM_2, OUTPUT_DIM, None);
+
+    let optimizer = SGD::new(0.01);
 
     for epoch in 1..EPOCHS {
-        for (i, (x, y)) in x
-            .array
-            .outer_iter_mut()
-            .zip(y.array.outer_iter_mut())
-            .enumerate()
-        {
-            let mut x = Tensor::new(x.to_owned());
-            let mut y = Tensor::new(y.to_owned());
+        for (i, (x, y)) in x.array.outer_iter().zip(y.array.outer_iter()).enumerate() {
+            let x = Tensor::new(x.to_owned());
+            let y = Tensor::new(y.to_owned());
 
-            let mut h1 = x.matmul(&mut w1).add(&mut b1).sigmoid();
-            let mut h2 = h1.matmul(&mut w2).add(&mut b2).sigmoid();
-            let mut y_pred = h2.matmul(&mut w3).add(&mut b3);
+            let h1 = layer1.forward(&x);
+            let h2 = layer2.forward(&h1);
+            let y_pred = layer3.forward(&h2);
 
-            let loss = y_pred.cross_entropy_with_softmax(&mut y);
+            let loss = y_pred.cross_entropy_with_softmax(&y);
 
             if i % 100 == 0 {
-                println!("Epoch {}, Step {}, Loss {:?}", epoch, i, loss.array);
                 // println!("true \n{:?}", y.array.slice(s![0..10, ..]));
                 // println!("out \n{:?}", y_pred.array.slice(s![0..10, ..]));
+                println!("Epoch {}: Loss {:#?}", epoch, loss.array);
             }
 
             loss.backward();
-
-            let w1_gradient = w1.gradient().unwrap();
-            w1.array -= &(&w1_gradient.array * 0.01);
-
-            let w2_gradient = w2.gradient().unwrap();
-            w2.array -= &(&w2_gradient.array * 0.01);
-
-            let w3_gradient = w3.gradient().unwrap();
-            w3.array -= &(&w3_gradient.array * 0.01);
-
-            let b1_gradient = b1.gradient().unwrap();
-            b1.array -= &(&b1_gradient.array * 0.01);
-
-            let b2_gradient = b2.gradient().unwrap();
-            b2.array -= &(&b2_gradient.array * 0.01);
-
-            let b3_gradient = b3.gradient().unwrap();
-            b3.array -= &(&b3_gradient.array * 0.01);
+            optimizer.step(
+                layer1
+                    .trainable_weights()
+                    .into_iter()
+                    .chain(layer2.trainable_weights().into_iter())
+                    .chain(layer3.trainable_weights().into_iter())
+                    .collect(),
+            )
         }
     }
 }

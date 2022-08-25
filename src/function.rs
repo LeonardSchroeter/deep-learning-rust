@@ -5,11 +5,11 @@ use crate::{node::Node, tensor::Tensor};
 pub trait Function {
     fn arity(&self) -> u8;
 
-    fn call(&mut self, inputs: Vec<&mut Tensor>) -> Tensor;
+    fn call(&mut self, inputs: Vec<&Tensor>) -> Tensor;
 
     fn gradient(&self, outer_gradient: &Tensor) -> Vec<Tensor>;
 
-    fn call_checked(&mut self, inputs: Vec<&mut Tensor>) -> Tensor {
+    fn call_checked(&mut self, inputs: Vec<&Tensor>) -> Tensor {
         if inputs.len() != self.arity().into() {
             panic!("Wrong number of input tensors");
         }
@@ -17,7 +17,7 @@ pub trait Function {
         self.call(inputs)
     }
 
-    fn call_and_build_graph_unary(input: &mut Tensor) -> Tensor
+    fn call_and_build_graph_unary(input: &Tensor) -> Tensor
     where
         Self: Sized + Default + 'static,
     {
@@ -38,7 +38,7 @@ pub trait Function {
         result
     }
 
-    fn call_and_build_graph_binary(input1: &mut Tensor, input2: &mut Tensor) -> Tensor
+    fn call_and_build_graph_binary(input1: &Tensor, input2: &Tensor) -> Tensor
     where
         Self: Sized + Default + 'static,
     {
@@ -86,7 +86,7 @@ macro_rules! impl_tensor_unary {
     ($($t:ty as $func_name:ident),+) => {
         impl Tensor {
             $(
-                pub fn $func_name(&mut self) -> Tensor {
+                pub fn $func_name(&self) -> Tensor {
                     <$t>::call_and_build_graph_unary(self)
                 }
             )+
@@ -99,7 +99,7 @@ macro_rules! impl_tensor_binary {
     ($($t:ty as $func_name:ident),+) => {
         impl Tensor {
             $(
-                pub fn $func_name(&mut self, rhs: &mut Tensor) -> Tensor {
+                pub fn $func_name(&self, rhs: &Tensor) -> Tensor {
                     <$t>::call_and_build_graph_binary(self, rhs)
                 }
             )+
