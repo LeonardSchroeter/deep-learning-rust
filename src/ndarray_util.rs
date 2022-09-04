@@ -10,7 +10,7 @@ pub fn broadcast_backwards<A: Data<Elem = f64>>(
 
     let mut target_shape_iter = target_shape.iter();
     let mut cur_dim = *target_shape_iter.next_back().unwrap_or(&0);
-    for (axis, &result_dim) in input.shape().to_vec().iter().enumerate().rev() {
+    for (axis, &result_dim) in input.shape().iter().enumerate().rev() {
         if cur_dim == result_dim {
             cur_dim = *target_shape_iter.next_back().unwrap_or(&0);
         } else {
@@ -24,4 +24,18 @@ pub fn broadcast_backwards<A: Data<Elem = f64>>(
     }
 
     result.into_shape(target_shape).expect("Wrong shape")
+}
+
+pub fn arg_max<A: Data<Elem = f64>>(array: &ArrayBase<A, IxDyn>) -> usize {
+    let mut result = f64::NEG_INFINITY;
+    let mut index = 0;
+
+    for (i, &value) in array.iter().enumerate() {
+        if value > result {
+            result = value;
+            index = i;
+        }
+    }
+
+    index
 }

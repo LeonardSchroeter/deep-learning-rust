@@ -5,6 +5,39 @@ use deep_learning::{
 };
 use mnist::{Mnist, MnistBuilder};
 
+pub struct MyNeuralNet {
+    input_layer: Linear,
+    hidden_layer: Linear,
+    output_layer: Linear,
+}
+
+impl MyNeuralNet {
+    fn new() -> Self {
+        Self {
+            input_layer: Linear::new(784, 128, Some(Tensor::sigmoid)),
+            hidden_layer: Linear::new(128, 64, Some(Tensor::sigmoid)),
+            output_layer: Linear::new(64, 10, None),
+        }
+    }
+}
+
+impl Layer for MyNeuralNet {
+    fn forward(&self, input: &Tensor) -> Tensor {
+        let x = self.input_layer.forward(input);
+        let x = self.hidden_layer.forward(&x);
+        self.output_layer.forward(&x)
+    }
+
+    fn trainable_weights(&mut self) -> Vec<&mut Tensor> {
+        self.input_layer
+            .trainable_weights()
+            .into_iter()
+            .chain(self.hidden_layer.trainable_weights().into_iter())
+            .chain(self.output_layer.trainable_weights().into_iter())
+            .collect()
+    }
+}
+
 fn main() {
     let Mnist {
         trn_img, trn_lbl, ..
@@ -27,14 +60,7 @@ fn main() {
 
     const EPOCHS: usize = 10;
 
-    const INPUT_DIM: usize = 784;
-    const HIDDEN_DIM_1: usize = 128;
-    const HIDDEN_DIM_2: usize = 64;
-    const OUTPUT_DIM: usize = 10;
-
-    let mut layer1 = Linear::new(INPUT_DIM, HIDDEN_DIM_1, Some(Tensor::sigmoid));
-    let mut layer2 = Linear::new(HIDDEN_DIM_1, HIDDEN_DIM_2, Some(Tensor::sigmoid));
-    let mut layer3 = Linear::new(HIDDEN_DIM_2, OUTPUT_DIM, None);
+    let mut nn = MyNeuralNet::new();
 
     let optimizer = SGD::new(0.01);
 
@@ -43,9 +69,7 @@ fn main() {
             let x = Tensor::new(x.to_owned());
             let y = Tensor::new(y.to_owned());
 
-            let h1 = layer1.forward(&x);
-            let h2 = layer2.forward(&h1);
-            let y_pred = layer3.forward(&h2);
+            let y_pred = nn.forward(&x);
 
             let loss = y_pred.cross_entropy_with_softmax(&y);
 
@@ -56,14 +80,8 @@ fn main() {
             }
 
             loss.backward();
-            optimizer.step(
-                layer1
-                    .trainable_weights()
-                    .into_iter()
-                    .chain(layer2.trainable_weights().into_iter())
-                    .chain(layer3.trainable_weights().into_iter())
-                    .collect(),
-            )
+
+            optimizer.step(nn.trainable_weights())
         }
     }
 }

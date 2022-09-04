@@ -9,10 +9,14 @@ use ndarray::{ArrayD, Dimension, IxDyn, Zip};
 use ndarray_rand::{rand_distr::Distribution, RandomExt};
 
 use crate::{
-    ndarray_util::{broadcast_backwards, ArcArrayD},
+    ndarray_util::{arg_max, broadcast_backwards, ArcArrayD},
     node::Node,
 };
 
+/// A wrapper around ndarray's n-dimensional array providing funcionality for differentiable operations
+///
+/// The array is of dynamic dimensions; the user has to check that he only applys operations with correct dimensions.
+/// The elements are of type f64.
 #[derive(Clone, Debug)]
 pub struct Tensor {
     pub array: ArcArrayD<f64>,
@@ -105,6 +109,10 @@ impl Tensor {
 
     pub fn sub_in_place(&mut self, rhs: &Tensor) {
         self.array -= &rhs.array;
+    }
+
+    pub fn arg_max(&self) -> usize {
+        arg_max(&self.array)
     }
 }
 
